@@ -24,7 +24,7 @@ public class AccountService {
                 throw new IllegalArgumentException(account.getPassword() + " is not valid, please check and try again");
             }
         } else {
-            throw new IllegalArgumentException(account.getUsername() + " is not valid, please check and try again");
+                throw new IllegalArgumentException(account.getUsername() + " is not valid, please check and try again");
         }
     }
 
