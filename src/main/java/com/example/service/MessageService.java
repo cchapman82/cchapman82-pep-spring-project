@@ -4,22 +4,20 @@ package com.example.service;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
-import com.example.entity.Account;
 import com.example.entity.Message;
+import com.example.exception.ResourceNotFoundException;
 import com.example.repository.MessageRepository;
 import com.example.repository.AccountRepository;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
 import java.util.List;
+import java.util.NoSuchElementException;
 @Service
 public class MessageService {
 
     private MessageRepository messageRepository;
     private AccountRepository accountRepository;
-    private ObjectMapper om = new ObjectMapper();
 
     @Autowired
     public MessageService(MessageRepository messageRepository, AccountRepository accountRepository){
@@ -28,91 +26,61 @@ public class MessageService {
         this.accountRepository = accountRepository;
     }
 
-    public String createMessage(String obj) {
-        String json = "";
-        try {
-            Message message = om.readValue(obj, Message.class);
-            if(message.getMessageText() != "" && message.getMessageText().length() <= 255) {
-                accountRepository.findById(message.getPostedBy());
-                message = (Message) messageRepository.save(message);
-                json = om.writeValueAsString(message);
+    public Message createMessage(Message message) throws ResourceNotFoundException{
+        if(message.getMessageText() != "") {
+            if(message.getMessageText().length() <= 255) {
+            accountRepository.findById(message.getPostedBy()).orElseThrow(() ->
+                new ResourceNotFoundException("Account ID " + message.getPostedBy() + " not found."));
+            return messageRepository.save(message);
+            } else {
+                throw new IllegalArgumentException("Message Text is too long.");
             }
-        } catch (JsonProcessingException e) {
-            e.printStackTrace();
-        } catch (Exception e) {
-            e.printStackTrace();
+        } else {
+            throw new IllegalArgumentException("Message Text can not be blank.");
         }
-        return json;
     }
 
-    public String getMessagesById(Integer account_id) {
-        String json = "";
-         try {
-            Account account = accountRepository.findById(account_id).get();
-            if(account != null){
-            List<Message> messages = (List<Message>) messageRepository.findAllByPostedBy(account_id);
-            json = om.writeValueAsString(messages);
-            }
-        } catch (JsonProcessingException e) {
-            e.printStackTrace();
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-        return json;
+    public List<Message> getMessagesById(Integer account_id) throws ResourceNotFoundException {
+        accountRepository.findById(account_id).orElseThrow(() ->
+                    new ResourceNotFoundException("Account ID " + account_id + " not found."));
+        return messageRepository.findAllByPostedBy(account_id);
     }
 
-    public String getAllMessages() {
-        String json = "";
-        List<Message> messages = (List<Message>) messageRepository.findAll();
-        try {
-            json = om.writeValueAsString(messages);
-        } catch (JsonProcessingException e) {
-            e.printStackTrace();
-        }
-        return json;
+    public List<Message> getAllMessages() {
+        return (List<Message>) messageRepository.findAll();
     }
 
-    public String getMessageById(Integer message_id) {
-        String json = "";
-        try {
-            Message message = (Message) messageRepository.findById(message_id).get();
-            json = om.writeValueAsString(message);
-        } catch (JsonProcessingException e) {
-            e.printStackTrace();
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-        return json;
+    public Message getMessageById(Integer message_id) throws NoSuchElementException {
+        return messageRepository.findById(message_id).orElseThrow(() -> new NoSuchElementException(""));
     }
 
-    public String updateMessage(Integer message_id, String messageText) {
-        String json = "";
+    public Integer updateMessage(Integer message_id, String messageText) throws ResourceNotFoundException {
+        Integer itemsChanged = 0;
         String newText = messageText.substring(messageText.indexOf("=") + 1, messageText.length());
         JsonObject obj = JsonParser.parseString(newText).getAsJsonObject();
         String text = obj.get("messageText").toString().replace("\"", "");
-        try {
-            Message message = messageRepository.findById(message_id).get();
-            if(message != null) {
-                if(!text.equals("") && text.length() <= 255){
-                    message.setMessageText(text);
-                    message = messageRepository.save(message);
-                    json = "1";
-                }
-            }        
-        } catch (Exception e){
-            e.printStackTrace();
+        Message message = messageRepository.findById(message_id).orElseThrow(() ->
+                    new ResourceNotFoundException("Message ID " + message_id + " not found."));
+        if(!text.equals("")){
+            if(text.length() <= 255){
+            message.setMessageText(text);
+            message = messageRepository.save(message);
+            itemsChanged = 1;
+            } else {
+                throw new IllegalArgumentException("Message text must not be blank");
+            }
+        } else {
+            throw new IllegalArgumentException("Message text must not be blank");
         }
-        return json;
+        return itemsChanged; 
     }
 
-    public Long deleteMessage(Integer message_id) {
-        Long result = 0L;
-        try {
+    public long deleteMessage(Integer message_id){
+        Long origCount = messageRepository.count();
+        if(messageRepository.existsById(message_id)) {
             messageRepository.deleteById(message_id);
-            result = 1L;
-        } catch (Exception e){
-            result = 0L;
         }
-        return result;
+        Long newCount = messageRepository.count();
+        return origCount - newCount;
     }
 }
